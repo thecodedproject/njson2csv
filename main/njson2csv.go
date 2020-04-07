@@ -106,6 +106,7 @@ func seekFilesToStart(files []*os.File) error {
 			return err
 		}
 	}
+	return nil
 }
 
 func writeValues(outFile *os.File, files []*os.File, h njson2csv.HeaderPos) error {
