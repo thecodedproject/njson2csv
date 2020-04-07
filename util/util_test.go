@@ -1,9 +1,9 @@
-package njson2csv_test
+package util_test
 
 import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/thecodedproject/njson2csv"
+	"github.com/thecodedproject/njson2csv/util"
 	"io"
 	"strings"
 	"testing"
@@ -61,8 +61,8 @@ func TestGetHeaders(t *testing.T) {
 
 			reader := strings.NewReader(test.njson)
 
-			var h njson2csv.Headers
-			h, err := njson2csv.AddHeaders(h, reader)
+			var h util.Headers
+			h, err := util.AddHeaders(h, reader)
 
 			if test.expectedErr != nil {
 				require.Error(t, err)
@@ -183,15 +183,15 @@ func TestWriteLines(t *testing.T) {
 			reader := strings.NewReader(test.njson)
 			var writer LineWriter
 
-			var h njson2csv.Headers
+			var h util.Headers
 			for fieldName, _ := range test.constantFields {
 				h.Add(fieldName)
 			}
-			h, err := njson2csv.AddHeaders(h, reader)
+			h, err := util.AddHeaders(h, reader)
 			require.NoError(t, err)
 			reader.Seek(0, io.SeekStart)
 
-			err = njson2csv.WriteLines(&writer, reader, &h, test.constantFields)
+			err = util.WriteLines(&writer, reader, &h, test.constantFields)
 			require.NoError(t, err)
 
 			assert.Equal(t, test.expectedLines, writer.Lines)
@@ -205,10 +205,10 @@ func TestWriteLinesWhenHeaderNotFoundReturnsError(t *testing.T) {
 		"{\"a\": 0}",
 	)
 	var writer LineWriter
-	var h njson2csv.Headers
+	var h util.Headers
 	var cf map[string]string
 
-	err := njson2csv.WriteLines(&writer, reader, &h, cf)
+	err := util.WriteLines(&writer, reader, &h, cf)
 	require.Error(t, err)
 
 	assert.Contains(t, err.Error(), "a")

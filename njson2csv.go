@@ -1,196 +1,130 @@
-package njson2csv
+package main
 
 import (
-	"bufio"
-	"encoding/json"
+	"flag"
 	"io"
-	"sort"
-	"fmt"
+	"log"
+	"github.com/thecodedproject/njson2csv/util"
+	"os"
 )
 
-type HeaderPos interface{
-	Position(field string) (int, error)
-	NumFields() int
+const (
+	fileFieldName = "__nsjon_file"
+)
+
+var outputFile = flag.String("o", "out.csv", "Output csv file")
+
+func main() {
+	flag.Parse()
+
+	if flag.NArg() == 0 {
+		log.Fatal("usage: njson2csv [-o output_file] njson_file [more_njson_files...]")
+	}
+
+	assertFileDoesNotExist(*outputFile)
+
+	files, err := openFiles(flag.Args())
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, f := range files {
+		defer f.Close()
+	}
+
+	out, err := os.OpenFile(*outputFile, os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer out.Close()
+
+	headers, err := createHeaders(files)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	_, err = out.Write(headers.CsvLine())
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = seekFilesToStart(files)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = writeValues(out, files, &headers)
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
-type Headers struct {
-	fields []string
+func assertFileDoesNotExist(filename string) {
+
+	_, err := os.Stat(filename)
+	if os.IsNotExist(err) {
+		return
+	} else if err != nil {
+		log.Fatal(err)
+	}
+	log.Fatal(filename, " already exists")
 }
 
-func (h *Headers) CsvLine() []byte {
+func openFiles(filenames []string) ([]*os.File, error) {
 
-	return sliceToCsvLine(h.fields)
+	files := make([]*os.File, 0, len(filenames))
+	for _, filename := range flag.Args() {
+		f, err := os.Open(filename)
+		if err != nil {
+			return nil, err
+		}
+
+		files = append(files, f)
+	}
+	return files, nil
 }
 
-func (h *Headers) Position(field string) (int, error) {
+func createHeaders(files []*os.File) (util.Headers, error) {
 
-	for i, f := range h.fields {
-		if f == field {
-			return i, nil
+	var h util.Headers
+	h.Add(fileFieldName)
+	for _, f := range files {
+		var err error
+		h, err = util.AddHeaders(h, f)
+		if err != nil {
+			return util.Headers{}, err
 		}
 	}
-	return 0, fmt.Errorf("No header found for field '%s'", field)
-}
-
-func (h *Headers) NumFields() int {
-
-	return len(h.fields)
-}
-
-func (h *Headers) Add(field string) {
-
-	if !contains(h.fields, field) {
-		h.fields = append(h.fields, field)
-		sort.Strings(h.fields)
-	}
-}
-
-func AddHeaders(h Headers, r io.Reader) (Headers, error) {
-
-	bufReader := bufio.NewReader(r)
-	iLine := 0
-	for {
-		line, _, err := bufReader.ReadLine()
-		if err == io.EOF {
-			break
-		} else if err != nil {
-			return Headers{}, err
-		}
-
-		m := make(map[string]interface{})
-		err = json.Unmarshal(line, &m)
-
-		addSubFields(&h, "", m)
-
-		iLine++
-	}
-
 	return h, nil
 }
 
-func WriteLines(
-	w io.Writer,
-	r io.Reader,
-	h HeaderPos,
-	constantFields map[string]string,
-) error {
+func seekFilesToStart(files []*os.File) error {
 
-	fieldValues := make([]string, h.NumFields())
-
-	bufReader := bufio.NewReader(r)
-	for {
-		line, _, err := bufReader.ReadLine()
-		if err == io.EOF {
-			break
-		} else if err != nil {
-			return err
-		}
-
-		m := make(map[string]interface{})
-		err = json.Unmarshal(line, &m)
+	for _, f := range files {
+		_, err := f.Seek(0, io.SeekStart)
 		if err != nil {
 			return err
 		}
+	}
+	return nil
+}
 
-		for i := range fieldValues {
-			fieldValues[i] = ""
+func writeValues(outFile *os.File, files []*os.File, h util.HeaderPos) error {
+
+	for _, f := range files {
+		fileValues := map[string]string{
+			fileFieldName: f.Name(),
 		}
 
-		for fieldName, value := range constantFields {
-			iField, err := h.Position(fieldName)
-			if err != nil {
-				return err
-			}
-			fieldValues[iField] = fmt.Sprint(value)
-		}
-
-		err = addSubValues(fieldValues, h, "", m)
-		if err != nil {
-			return err
-		}
-
-		_, err = w.Write(
-			sliceToCsvLine(fieldValues),
+		err := util.WriteLines(
+			outFile,
+			f,
+			h,
+			fileValues,
 		)
 		if err != nil {
 			return err
 		}
 	}
-
 	return nil
-}
-
-func addSubFields(h *Headers, parentName string, m map[string]interface{}) {
-
-	for childName := range m {
-		headerName := fieldName(parentName, childName)
-		childDict, isDict := m[childName].(map[string]interface{})
-		if isDict {
-			addSubFields(
-				h,
-				headerName,
-				childDict,
-			)
-		} else {
-			h.Add(headerName)
-		}
-	}
-}
-
-func fieldName(parentName, childName string) string {
-
-	if parentName == "" {
-		return childName
-	}
-
-	return fmt.Sprint(parentName, "_", childName)
-}
-
-func addSubValues(
-	fieldValues []string,
-	h HeaderPos,
-	parentName string,
-	m map[string]interface{},
-) error {
-
-	for childName, childValue := range m {
-
-		headerName := fieldName(parentName, childName)
-
-		childDict, isDict := childValue.(map[string]interface{})
-		if isDict {
-			addSubValues(
-				fieldValues,
-				h,
-				headerName,
-				childDict)
-		} else {
-			iField, err := h.Position(headerName)
-			if err != nil {
-				return err
-			}
-			fieldValues[iField] = fmt.Sprint(childValue)
-		}
-	}
-	return nil
-}
-
-func contains(s []string, v string) bool {
-
-	for _, e := range s {
-		if e == v {
-			return true
-		}
-	}
-	return false
-}
-
-func sliceToCsvLine(s []string) []byte {
-
-	var str string
-	for _, value := range s {
-		str += value + ","
-	}
-	str += "\n"
-	return []byte(str)
 }
