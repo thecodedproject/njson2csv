@@ -9,7 +9,7 @@ import (
 )
 
 type HeaderPos interface{
-	Position(field string) int
+	Position(field string) (int, error)
 	NumFields() int
 }
 
@@ -22,14 +22,14 @@ func (h *Headers) CsvLine() []byte {
 	return sliceToCsvLine(h.fields)
 }
 
-func (h *Headers) Position(field string) int {
+func (h *Headers) Position(field string) (int, error) {
 
 	for i, f := range h.fields {
 		if f == field {
-			return i
+			return i, nil
 		}
 	}
-	return 0
+	return 0, fmt.Errorf("No header found for field '%s'", field)
 }
 
 func (h *Headers) NumFields() int {
@@ -97,15 +97,24 @@ func WriteLines(
 		}
 
 		for fieldName, value := range constantFields {
-			iField := h.Position(fieldName)
+			iField, err := h.Position(fieldName)
+			if err != nil {
+				return err
+			}
 			fieldValues[iField] = fmt.Sprint(value)
 		}
 
-		addSubValues(fieldValues, h, "", m)
+		err = addSubValues(fieldValues, h, "", m)
+		if err != nil {
+			return err
+		}
 
-		w.Write(
+		_, err = w.Write(
 			sliceToCsvLine(fieldValues),
 		)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -142,7 +151,7 @@ func addSubValues(
 	h HeaderPos,
 	parentName string,
 	m map[string]interface{},
-) {
+) error {
 
 	for childName, childValue := range m {
 
@@ -156,10 +165,14 @@ func addSubValues(
 				headerName,
 				childDict)
 		} else {
-			iField := h.Position(headerName)
+			iField, err := h.Position(headerName)
+			if err != nil {
+				return err
+			}
 			fieldValues[iField] = fmt.Sprint(childValue)
 		}
 	}
+	return nil
 }
 
 func contains(s []string, v string) bool {

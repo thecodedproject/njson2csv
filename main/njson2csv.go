@@ -2,10 +2,14 @@ package main
 
 import (
 	"flag"
+	"io"
 	"log"
-	//"io"
 	"github.com/thecodedproject/njson2csv"
 	"os"
+)
+
+const (
+	fileFieldName = "__nsjon_file"
 )
 
 var outputFile = flag.String("o", "out.csv", "Output csv file")
@@ -39,23 +43,20 @@ func main() {
 		log.Fatal(err)
 	}
 
-	out.Write(headers.CsvLine())
-
-/*
-	for _, f := range files {
-
-		var h njson2csv.Headers
-		for fieldName, _ := range test.constantFields {
-			h.Add(fieldName)
-		}
-		h, err := njson2csv.AddHeaders(h, reader)
-		require.NoError(t, err)
-		reader.Seek(0, io.SeekStart)
-
-
+	_, err = out.Write(headers.CsvLine())
+	if err != nil {
+		log.Fatal(err)
 	}
-*/
 
+	err = seekFilesToStart(files)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = writeValues(out, files, &headers)
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 func assertFileDoesNotExist(filename string) {
@@ -86,7 +87,7 @@ func openFiles(filenames []string) ([]*os.File, error) {
 func createHeaders(files []*os.File) (njson2csv.Headers, error) {
 
 	var h njson2csv.Headers
-	h.Add("__njson_file")
+	h.Add(fileFieldName)
 	for _, f := range files {
 		var err error
 		h, err = njson2csv.AddHeaders(h, f)
@@ -95,4 +96,37 @@ func createHeaders(files []*os.File) (njson2csv.Headers, error) {
 		}
 	}
 	return h, nil
+}
+
+func seekFilesToStart(files []*os.File) error {
+
+	for _, f := range files {
+		_, err := f.Seek(0, io.SeekStart)
+		if err != nil {
+			return err
+		}
+	}
+}
+
+func writeValues(outFile *os.File, files []*os.File, h njson2csv.HeaderPos) error {
+
+	for _, f := range files {
+
+		log.Println(f.Name())
+
+		fileValues := map[string]string{
+			fileFieldName: f.Name(),
+		}
+
+		err := njson2csv.WriteLines(
+			outFile,
+			f,
+			h,
+			fileValues,
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -75,7 +75,9 @@ func TestGetHeaders(t *testing.T) {
 			assert.Equal(t, test.expectedHeader, string(h.CsvLine()))
 
 			for pos, field := range test.expectedOrder {
-				assert.Equal(t, pos, h.Position(field), field)
+				actualPos, err := h.Position(field)
+				require.NoError(t, err)
+				assert.Equal(t, pos, actualPos, field)
 			}
 		})
 	}
@@ -195,4 +197,19 @@ func TestWriteLines(t *testing.T) {
 			assert.Equal(t, test.expectedLines, writer.Lines)
 		})
 	}
+}
+
+func TestWriteLinesWhenHeaderNotFoundReturnsError(t *testing.T) {
+
+	reader := strings.NewReader(
+		"{\"a\": 0}",
+	)
+	var writer LineWriter
+	var h njson2csv.Headers
+	var cf map[string]string
+
+	err := njson2csv.WriteLines(&writer, reader, &h, cf)
+	require.Error(t, err)
+
+	assert.Contains(t, err.Error(), "a")
 }
