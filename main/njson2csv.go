@@ -18,7 +18,7 @@ func main() {
 	flag.Parse()
 
 	if flag.NArg() == 0 {
-		log.Fatal("usage: njson2csv [-o output_file] njson_file [...]")
+		log.Fatal("usage: njson2csv [-o output_file] njson_file [more_njson_files...]")
 	}
 
 	assertFileDoesNotExist(*outputFile)

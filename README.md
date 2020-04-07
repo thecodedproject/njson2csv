@@ -4,7 +4,7 @@ Tool for converting new-line delimited JSON (NJSON) to CSV format.
 
 # usage
 
-`njson2csv [-o output.csv] njsonFile [...]`
+`njson2csv [-o output.csv] njson_file [more_njson_files...]`
 
 # notes/features
 
