@@ -1,6 +1,7 @@
 package util_test
 
 import (
+	"errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/thecodedproject/njson2csv/util"
@@ -14,6 +15,7 @@ func TestGetHeaders(t *testing.T) {
 	testCases := []struct{
 		name string
 		njson string
+		filterColumns []string
 		expectedHeader string
 		expectedOrder []string
 		expectedErr error
@@ -83,6 +85,61 @@ func TestGetHeaders(t *testing.T) {
 	}
 }
 
+func TestFilterHeaders(t *testing.T) {
+
+	testCases := []struct{
+		name string
+		njson string
+		filterColumns []string
+		expectedHeader string
+		expectedOrder []string
+		expectedErr error
+	}{
+		{
+			name: "Filter columns to subset when all columns exist",
+			njson: "{\"a\": 10, \"c\": 11}\n{\"b\": 0, \"f\": 1}\n{\"e\": 1, \"d\": 0}\n",
+			filterColumns: []string{"b", "e", "f"},
+			expectedHeader: "b,e,f,\n",
+			expectedOrder: []string{"b", "e", "f"},
+		},
+		{
+			name: "Filter columns to subset when not all columns exist returns error",
+			njson: "{\"a\": 10, \"c\": 11}\n{\"b\": 0, \"f\": 1}\n{\"e\": 1, \"d\": 0}\n",
+			filterColumns: []string{"someCol", "e", "f"},
+			expectedErr: errors.New("Cannot filter column `someCol`; no such column"),
+		},
+	}
+
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+
+			reader := strings.NewReader(test.njson)
+
+			var h util.Headers
+			h, err := util.AddHeaders(h, reader)
+			require.NoError(t, err)
+
+			h, err = util.FilterHeaders(h, test.filterColumns)
+
+			if test.expectedErr != nil {
+				require.Error(t, err)
+				assert.Equal(t, test.expectedErr.Error(), err.Error())
+				return
+			}
+
+			require.NoError(t, err)
+
+			assert.Equal(t, test.expectedHeader, string(h.CsvLine()))
+
+			for pos, field := range test.expectedOrder {
+				actualPos, err := h.Position(field)
+				require.NoError(t, err)
+				assert.Equal(t, pos, actualPos, field)
+			}
+		})
+	}
+}
+
 type LineWriter struct {
 	Lines []string
 }
@@ -99,6 +156,7 @@ func TestWriteLines(t *testing.T) {
 		name string
 		njson string
 		constantFields map[string]string
+		filterColumns []string
 		expectedLines []string
 	}{
 		{
@@ -175,6 +233,20 @@ func TestWriteLines(t *testing.T) {
 				",value,,fds,world,\n",
 			},
 		},
+		{
+			name: "Multiple lines with filter columns",
+			njson: `{"a": 11,	"c": false, "d": 12}
+							{"b": true, 	"c": 1.34}
+							{"a": 1.3,		"b": "a", 	"c": 43}
+							{"c": "fds", "d": false}`,
+			filterColumns: []string{"a", "c"},
+			expectedLines: []string{
+				"11,false,\n",
+				",1.34,\n",
+				"1.3,43,\n",
+				",fds,\n",
+			},
+		},
 	}
 
 	for _, test := range testCases {
@@ -190,6 +262,11 @@ func TestWriteLines(t *testing.T) {
 			h, err := util.AddHeaders(h, reader)
 			require.NoError(t, err)
 			reader.Seek(0, io.SeekStart)
+
+			if len(test.filterColumns) != 0 {
+				h, err = util.FilterHeaders(h, test.filterColumns)
+				require.NoError(t, err)
+			}
 
 			err = util.WriteLines(&writer, reader, &h, test.constantFields)
 			require.NoError(t, err)

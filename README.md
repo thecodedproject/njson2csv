@@ -36,5 +36,9 @@ Tool for converting new-line delimited JSON (NJSON) to CSV format.
   [1,2,3],
   ```
 
+* Filter to a subset of columns;
+
+	`$ njson2csv --columns `col1,col2,col4``
+
 
 Enjoy!

@@ -10,11 +10,13 @@ import (
 
 type HeaderPos interface{
 	Position(field string) (int, error)
+	FieldWasRemoved(field string) bool
 	NumFields() int
 }
 
 type Headers struct {
 	fields []string
+	removedFields []string
 }
 
 func (h *Headers) CsvLine() []byte {
@@ -32,6 +34,11 @@ func (h *Headers) Position(field string) (int, error) {
 	return 0, fmt.Errorf("No header found for field '%s'", field)
 }
 
+func (h *Headers) FieldWasRemoved(field string) bool {
+
+	return contains(h.removedFields, field)
+}
+
 func (h *Headers) NumFields() int {
 
 	return len(h.fields)
@@ -43,6 +50,15 @@ func (h *Headers) Add(field string) {
 		h.fields = append(h.fields, field)
 		sort.Strings(h.fields)
 	}
+}
+
+func (h *Headers) remove(field string) {
+
+	i, _ := h.Position(field)
+	copy(h.fields[i:], h.fields[i+1:])
+	h.fields[len(h.fields)-1] = ""
+	h.fields = h.fields[:len(h.fields)-1]
+	h.removedFields = append(h.removedFields, field)
 }
 
 func AddHeaders(h Headers, r io.Reader) (Headers, error) {
@@ -63,6 +79,32 @@ func AddHeaders(h Headers, r io.Reader) (Headers, error) {
 		addSubFields(&h, "", m)
 
 		iLine++
+	}
+
+	return h, nil
+}
+
+func FilterHeaders(h Headers, filterColumns []string) (Headers, error) {
+
+	for _, col := range filterColumns {
+		if !contains(h.fields, col) {
+			return Headers{}, fmt.Errorf(
+				"Cannot filter column `%s`; no such column",
+				col,
+			)
+		}
+	}
+
+	headersToRemove := make([]string, 0, len(h.fields))
+
+	for _, header := range h.fields {
+		if !contains(filterColumns, header) {
+			headersToRemove = append(headersToRemove, header)
+		}
+	}
+
+	for _, header := range headersToRemove {
+		h.remove(header)
 	}
 
 	return h, nil
@@ -164,7 +206,7 @@ func addSubValues(
 				h,
 				headerName,
 				childDict)
-		} else {
+		} else if !h.FieldWasRemoved(headerName) {
 			iField, err := h.Position(headerName)
 			if err != nil {
 				return err

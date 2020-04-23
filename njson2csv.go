@@ -6,6 +6,7 @@ import (
 	"log"
 	"github.com/thecodedproject/njson2csv/util"
 	"os"
+	"strings"
 )
 
 const (
@@ -13,12 +14,13 @@ const (
 )
 
 var outputFile = flag.String("o", "out.csv", "Output csv file")
+var filterColumnsString = flag.String("columns", "", "Comma seperated list of columns to keep (e.g. `\"col1,col2\"`)")
 
 func main() {
 	flag.Parse()
 
 	if flag.NArg() == 0 {
-		log.Fatal("usage: njson2csv [-o output_file] njson_file [more_njson_files...]")
+		log.Fatal("usage: njson2csv [-o output_file] [-columns \"columnName,...\"] njson_file [more_njson_files...]")
 	}
 
 	assertFileDoesNotExist(*outputFile)
@@ -38,7 +40,15 @@ func main() {
 	}
 	defer out.Close()
 
-	headers, err := createHeaders(files)
+	var filterColumns []string
+	if *filterColumnsString != "" {
+		filterColumns = strings.Split(*filterColumnsString, ",")
+	}
+
+	headers, err := createHeaders(
+		files,
+		filterColumns,
+	)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -84,17 +94,26 @@ func openFiles(filenames []string) ([]*os.File, error) {
 	return files, nil
 }
 
-func createHeaders(files []*os.File) (util.Headers, error) {
+func createHeaders(files []*os.File, filterColumns []string) (util.Headers, error) {
 
 	var h util.Headers
-	h.Add(fileFieldName)
+	var err error
 	for _, f := range files {
-		var err error
 		h, err = util.AddHeaders(h, f)
 		if err != nil {
 			return util.Headers{}, err
 		}
 	}
+
+	if len(filterColumns) != 0 {
+		h, err = util.FilterHeaders(h, filterColumns)
+		if err != nil {
+			return util.Headers{}, err
+		}
+	}
+
+	h.Add(fileFieldName)
+
 	return h, nil
 }
 
