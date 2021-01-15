@@ -15,6 +15,7 @@ const (
 
 var outputFile = flag.String("o", "out.csv", "Output csv file")
 var filterColumnsString = flag.String("columns", "", "Comma seperated list of columns to keep (e.g. `\"col1,col2\"`)")
+var ioBufferSize = flag.Int("io_buffer", 4096, "The maximum line length the io reader will read")
 
 func main() {
 	flag.Parse()
@@ -50,7 +51,7 @@ func main() {
 		filterColumns,
 	)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("Error finding column names:", err)
 	}
 
 	_, err = out.Write(headers.CsvLine())
@@ -65,7 +66,13 @@ func main() {
 
 	err = writeValues(out, files, &headers)
 	if err != nil {
-		log.Fatal(err)
+		log.Println("Error writing values:", err)
+		log.Println("JSON decoding errors may be caused by truncated lines (if the io.Reader buffer is smaller than the max line length)")
+		log.Println("Get the max line length with:")
+		log.Println("")
+		log.Println("\tawk 'length > l {l=length;line=$0} END {print l}'", strings.Join(flag.Args(), " "))
+		log.Println("")
+		log.Fatal("Then adjust to `max_length+1` with the `--io_buffer` cmd option.")
 	}
 }
 
@@ -140,6 +147,7 @@ func writeValues(outFile *os.File, files []*os.File, h util.HeaderPos) error {
 			f,
 			h,
 			fileValues,
+			*ioBufferSize,
 		)
 		if err != nil {
 			return err

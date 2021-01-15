@@ -115,11 +115,12 @@ func WriteLines(
 	r io.Reader,
 	h HeaderPos,
 	constantFields map[string]string,
+	maxReaderLength int,
 ) error {
 
 	fieldValues := make([]string, h.NumFields())
 
-	bufReader := bufio.NewReader(r)
+	bufReader := bufio.NewReaderSize(r, maxReaderLength)
 	for {
 		line, _, err := bufReader.ReadLine()
 		if err == io.EOF {

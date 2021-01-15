@@ -268,7 +268,7 @@ func TestWriteLines(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			err = util.WriteLines(&writer, reader, &h, test.constantFields)
+			err = util.WriteLines(&writer, reader, &h, test.constantFields, 4096)
 			require.NoError(t, err)
 
 			assert.Equal(t, test.expectedLines, writer.Lines)
@@ -285,7 +285,7 @@ func TestWriteLinesWhenHeaderNotFoundReturnsError(t *testing.T) {
 	var h util.Headers
 	var cf map[string]string
 
-	err := util.WriteLines(&writer, reader, &h, cf)
+	err := util.WriteLines(&writer, reader, &h, cf, 4096)
 	require.Error(t, err)
 
 	assert.Contains(t, err.Error(), "a")
