@@ -51,7 +51,8 @@ func main() {
 		filterColumns,
 	)
 	if err != nil {
-		log.Fatal("Error finding column names:", err)
+		log.Println("Error finding column names:", err)
+		logFatalJsonErrorMessage()
 	}
 
 	_, err = out.Write(headers.CsvLine())
@@ -67,12 +68,7 @@ func main() {
 	err = writeValues(out, files, &headers)
 	if err != nil {
 		log.Println("Error writing values:", err)
-		log.Println("JSON decoding errors may be caused by truncated lines (if the io.Reader buffer is smaller than the max line length)")
-		log.Println("Get the max line length with:")
-		log.Println("")
-		log.Println("\tawk 'length > l {l=length;line=$0} END {print l}'", strings.Join(flag.Args(), " "))
-		log.Println("")
-		log.Fatal("Then adjust to `max_length+1` with the `--io_buffer` cmd option.")
+		logFatalJsonErrorMessage()
 	}
 }
 
@@ -106,7 +102,7 @@ func createHeaders(files []*os.File, filterColumns []string) (util.Headers, erro
 	var h util.Headers
 	var err error
 	for _, f := range files {
-		h, err = util.AddHeaders(h, f)
+		h, err = util.AddHeaders(h, f, *ioBufferSize)
 		if err != nil {
 			return util.Headers{}, err
 		}
@@ -154,4 +150,15 @@ func writeValues(outFile *os.File, files []*os.File, h util.HeaderPos) error {
 		}
 	}
 	return nil
+}
+
+func logFatalJsonErrorMessage() {
+
+		log.Println()
+		log.Println("JSON decoding errors may be caused by truncated lines (if the io.Reader buffer is smaller than the max line length)")
+		log.Println("Get the max line length with:")
+		log.Println("")
+		log.Println("\tawk 'length > l {l=length;line=$0} END {print l}'", strings.Join(flag.Args(), " "))
+		log.Println("")
+		log.Fatal("Then adjust to `max_length+1` with the `--io_buffer` cmd option.")
 }

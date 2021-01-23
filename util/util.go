@@ -61,9 +61,13 @@ func (h *Headers) remove(field string) {
 	h.removedFields = append(h.removedFields, field)
 }
 
-func AddHeaders(h Headers, r io.Reader) (Headers, error) {
+func AddHeaders(
+	h Headers,
+	r io.Reader,
+	maxReaderLength int,
+) (Headers, error) {
 
-	bufReader := bufio.NewReader(r)
+	bufReader := bufio.NewReaderSize(r, maxReaderLength)
 	iLine := 0
 	for {
 		line, _, err := bufReader.ReadLine()
@@ -75,6 +79,9 @@ func AddHeaders(h Headers, r io.Reader) (Headers, error) {
 
 		m := make(map[string]interface{})
 		err = json.Unmarshal(line, &m)
+		if err != nil {
+			return Headers{}, err
+		}
 
 		addSubFields(&h, "", m)
 
